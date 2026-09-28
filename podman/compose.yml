@@ -1,0 +1,57 @@
+services:
+  primary:
+    image: docker.io/library/postgres:16
+    environment:
+      POSTGRES_DB: ryow
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    command: >-
+      postgres -c wal_level=replica -c max_wal_senders=10
+      -c max_replication_slots=10 -c hot_standby=on
+    ports:
+      - "5432:5432"
+    volumes:
+      - primary-data:/var/lib/postgresql/data
+      - ./init:/docker-entrypoint-initdb.d:Z,ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ryow"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  replica-first:
+    image: docker.io/library/postgres:16
+    environment:
+      REPLICATION_USER: replicator
+      REPLICATION_PASSWORD: replicator
+      PGDATA: /var/lib/postgresql/data
+    entrypoint: ["bash", "/replica-entrypoint.sh"]
+    depends_on:
+      primary:
+        condition: service_healthy
+    ports:
+      - "5433:5432"
+    volumes:
+      - replica-first-data:/var/lib/postgresql/data
+      - ./replica-entrypoint.sh:/replica-entrypoint.sh:Z,ro
+
+  replica-second:
+    image: docker.io/library/postgres:16
+    environment:
+      REPLICATION_USER: replicator
+      REPLICATION_PASSWORD: replicator
+      PGDATA: /var/lib/postgresql/data
+    entrypoint: ["bash", "/replica-entrypoint.sh"]
+    depends_on:
+      primary:
+        condition: service_healthy
+    ports:
+      - "5434:5432"
+    volumes:
+      - replica-second-data:/var/lib/postgresql/data
+      - ./replica-entrypoint.sh:/replica-entrypoint.sh:Z,ro
+
+volumes:
+  primary-data:
+  replica-first-data:
+  replica-second-data:
